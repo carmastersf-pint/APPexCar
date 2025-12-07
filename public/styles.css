@@ -1,0 +1,4 @@
+body { background: #f8f9fa; }
+.card { margin-bottom: 1rem; }
+.preview-img { max-width: 120px; max-height: 80px; object-fit: cover; }
+.small-muted { font-size: 0.85rem; color: #6c757d; }
