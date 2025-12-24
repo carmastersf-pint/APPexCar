@@ -285,43 +285,7 @@ app.delete("/vehiculos/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/vehiculos/:id", async (req, res) => {
-  try {
-    const ex = await dbGet("SELECT * FROM vehiculos WHERE id = ?", [req.params.id]);
-    if (!ex) return res.status(404).json({ error: "Vehículo no encontrado" });
 
-    const { marca, modelo, placas } = req.body;
-
-    await dbRun(
-      `UPDATE vehiculos 
-       SET marca = COALESCE(?, marca),
-           modelo = COALESCE(?, modelo),
-           placas = COALESCE(?, placas)
-       WHERE id = ?`,
-      [marca, modelo, placas, req.params.id]
-    );
-
-    await log("vehiculo_editado", req.params.id);
-
-    res.json(await dbGet("SELECT * FROM vehiculos WHERE id = ?", [req.params.id]));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.delete("/vehiculos/:id", async (req, res) => {
-  try {
-    const ex = await dbGet("SELECT * FROM vehiculos WHERE id = ?", [req.params.id]);
-    if (!ex) return res.status(404).json({ error: "Vehículo no encontrado" });
-
-    await dbRun("DELETE FROM vehiculos WHERE id = ?", [req.params.id]);
-    await log("vehiculo_eliminado", req.params.id);
-
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 // =========================
 //        ÓRDENES
