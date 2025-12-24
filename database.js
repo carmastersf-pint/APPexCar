@@ -65,9 +65,24 @@ if (DATABASE_URL) {
           fecha_cita TIMESTAMP,
           fecha_entrega TIMESTAMP,
           qr TEXT,
+          prioridad TEXT DEFAULT 'normal',
+          tecnico TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // Crear tabla costos si no existe
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS costos (
+          id SERIAL PRIMARY KEY,
+          orden_id INTEGER NOT NULL REFERENCES ordenes(id) ON DELETE CASCADE,
+          concepto TEXT NOT NULL,
+          costo NUMERIC NOT NULL,
+          tipo TEXT CHECK(tipo IN ('material','mano_obra','externo')) DEFAULT 'material',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
        await client.query(`
         CREATE TABLE IF NOT EXISTS logs (
           id SERIAL PRIMARY KEY,
@@ -76,6 +91,16 @@ if (DATABASE_URL) {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // Migraciones seguras (por si la tabla ordenes ya existía sin estas columnas)
+      try {
+        await client.query(`ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS prioridad TEXT DEFAULT 'normal'`);
+      } catch (e) { console.log('Info migration prioridad: ' + e.message); }
+
+      try {
+        await client.query(`ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS tecnico TEXT`);
+      } catch (e) { console.log('Info migration tecnico: ' + e.message); }
+
       console.log('Postgres schema initialized');
     } catch (e) {
       console.error('Error initializing Postgres schema:', e);
