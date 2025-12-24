@@ -10,10 +10,77 @@ if (DATABASE_URL) {
   // Postgres mode
   const { Client } = require('pg');
   const client = new Client({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
-  client.connect().catch((e) => {
+  
+  client.connect().then(async () => {
+    console.log('Connected to Postgres');
+    await initPostgresSchema();
+  }).catch((e) => {
     console.error('Error connecting to Postgres:', e.message);
     process.exit(1);
   });
+
+  async function initPostgresSchema() {
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS clientes (
+          id SERIAL PRIMARY KEY,
+          nombre TEXT NOT NULL,
+          telefono TEXT,
+          correo TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          nombre TEXT,
+          role TEXT DEFAULT 'user',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS vehiculos (
+          id SERIAL PRIMARY KEY,
+          cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+          marca TEXT,
+          modelo TEXT,
+          placas TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ordenes (
+          id SERIAL PRIMARY KEY,
+          cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+          vehiculo_id INTEGER NOT NULL REFERENCES vehiculos(id) ON DELETE CASCADE,
+          descripcion TEXT,
+          imagenes TEXT,
+          servicio TEXT,
+          total NUMERIC DEFAULT 0,
+          anticipo NUMERIC DEFAULT 0,
+          saldo NUMERIC DEFAULT 0,
+          status TEXT DEFAULT 'pendiente',
+          fecha_cita TIMESTAMP,
+          fecha_entrega TIMESTAMP,
+          qr TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+       await client.query(`
+        CREATE TABLE IF NOT EXISTS logs (
+          id SERIAL PRIMARY KEY,
+          accion TEXT,
+          detalle TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('Postgres schema initialized');
+    } catch (e) {
+      console.error('Error initializing Postgres schema:', e);
+    }
+  }
 
   function convertPlaceholders(sql) {
     let i = 0;
