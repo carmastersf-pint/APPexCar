@@ -23,6 +23,17 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
+// Add interceptor to include token in all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 export default function AdminPanel() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -38,6 +49,8 @@ export default function AdminPanel() {
   // Estados de Modales
   const [isModalOpen, setIsModalOpen] = useState(false); // Cliente
   const [isOrdenModalOpen, setIsOrdenModalOpen] = useState(false); // Orden
+  const [selectedOrden, setSelectedOrden] = useState(null); // Orden Seleccionada
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false); // Detalle Orden
 
   // Estados de Formularios
   const [newClient, setNewClient] = useState({ nombre: '', telefono: '', correo: '' });
@@ -148,18 +161,6 @@ export default function AdminPanel() {
         });
       }
 
-      // Necesitamos el token si la ruta está protegida
-      // Asumimos que por ahora la API permite o tenemos token en localStorage (si implementamos auth)
-      // Como vi 'authenticateToken' en index.js, necesitamos auth headers.
-      // Pero este frontend no parece tener login aún. 
-      // NOTA: Para que funcione sin login real, el usuario probablemente necesite 
-      // comentar 'authenticateToken' en el backend o implementar login.
-      // Voy a asumir que el usuario tiene un token o que el backend lo permite temporalmente.
-      // O mejor, enviamos un token dummy si es necesario, pero el backend verificará.
-      // En el estado actual, si no hay token, fallará (401).
-      // Solución rápida: Agregar un token dummy o manejar el error.
-      // Voy a intentar obtenerlo de localStorage por si acaso.
-      
       const token = localStorage.getItem('token');
       const config = {
         headers: { 
@@ -187,6 +188,33 @@ export default function AdminPanel() {
     }
   };
 
+  const handleViewOrden = (orden) => {
+    setSelectedOrden(orden);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleUpdateOrdenStatus = async (newStatus) => {
+    if (!selectedOrden) return;
+    try {
+      setSaving(true);
+      const token = localStorage.getItem('token');
+      await api.put(`/ordenes/${selectedOrden.id}`, 
+        { status: newStatus },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Actualizar localmente
+      setOrdenes(ordenes.map(o => o.id === selectedOrden.id ? { ...o, status: newStatus } : o));
+      setSelectedOrden({ ...selectedOrden, status: newStatus });
+      
+    } catch (error) {
+      console.error("Error updating orden:", error);
+      alert("Error al actualizar estado");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'clientes', label: 'Clientes', icon: Users },
@@ -198,6 +226,11 @@ export default function AdminPanel() {
   const vehiculosFiltrados = newOrden.cliente_id 
     ? vehiculos.filter(v => v.cliente_id == newOrden.cliente_id)
     : [];
+
+  // Calcular ventas del mes (suma de totales de órdenes completadas/entregadas)
+  const ventasMes = ordenes
+    .filter(o => o.status === 'completado' || o.status === 'entregado')
+    .reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
 
   return (
     <div className="min-h-screen bg-gray-100 flex font-sans text-slate-800">
@@ -285,8 +318,8 @@ export default function AdminPanel() {
                     <ClipboardList className="w-5 h-5" />
                   </span>
                 </div>
-                <p className="text-3xl font-bold text-gray-900">$0.00</p>
-                <p className="text-xs text-gray-400 mt-2">+0% vs mes anterior</p>
+                <p className="text-3xl font-bold text-gray-900">${ventasMes.toFixed(2)}</p>
+                <p className="text-xs text-gray-400 mt-2">Total completado</p>
               </div>
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -426,7 +459,7 @@ export default function AdminPanel() {
                           </td>
                           <td className="px-6 py-4 font-medium text-gray-900">${orden.total}</td>
                           <td className="px-6 py-4 text-right">
-                            <button className="text-indigo-600 hover:text-indigo-900 font-medium">Ver</button>
+                            <button onClick={() => handleViewOrden(orden)} className="text-indigo-600 hover:text-indigo-900 font-medium">Ver</button>
                           </td>
                         </tr>
                       ))
@@ -630,6 +663,98 @@ export default function AdminPanel() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detalle Orden */}
+      {isDetailModalOpen && selectedOrden && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="font-semibold text-gray-800">Orden #{selectedOrden.id.toString().padStart(4, '0')}</h3>
+                <p className="text-xs text-gray-500">{selectedOrden.cliente} - {selectedOrden.vehiculo}</p>
+              </div>
+              <button onClick={() => setIsDetailModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Status Bar */}
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-gray-700">Estado de la Orden</label>
+                <div className="flex flex-wrap gap-2">
+                  {['pendiente', 'en_proceso', 'completado', 'entregado', 'cancelado'].map(status => (
+                    <button
+                      key={status}
+                      onClick={() => handleUpdateOrdenStatus(status)}
+                      disabled={saving}
+                      className={`px-3 py-1 rounded-full text-xs font-medium capitalize border transition-colors ${
+                        selectedOrden.status === status
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      {status.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Detalles del Servicio</h4>
+                  <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    {selectedOrden.descripcion}
+                  </p>
+                </div>
+                <div>
+                   <h4 className="text-sm font-medium text-gray-900 mb-2">Información Financiera</h4>
+                   <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Total Estimado:</span>
+                        <span className="font-medium">${selectedOrden.total}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Anticipo:</span>
+                        <span className="font-medium text-green-600">-${selectedOrden.anticipo || 0}</span>
+                      </div>
+                      <div className="pt-2 border-t border-gray-200 flex justify-between text-sm font-bold">
+                         <span>Saldo Pendiente:</span>
+                         <span className="text-indigo-600">${(selectedOrden.total || 0) - (selectedOrden.anticipo || 0)}</span>
+                      </div>
+                   </div>
+                </div>
+              </div>
+
+              {/* Imágenes */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Evidencia Fotográfica</h4>
+                {selectedOrden.imagenes && selectedOrden.imagenes.length > 0 ? (
+                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                     {selectedOrden.imagenes.map((img, idx) => (
+                       <a key={idx} href={`${API_URL}${img}`} target="_blank" rel="noreferrer" className="block aspect-square rounded-lg overflow-hidden border border-gray-200 hover:opacity-90 transition-opacity">
+                         <img src={`${API_URL}${img}`} alt={`Evidencia ${idx}`} className="w-full h-full object-cover" />
+                       </a>
+                     ))}
+                   </div>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">No hay imágenes adjuntas</p>
+                )}
+              </div>
+              
+              <div className="flex justify-end pt-4 border-t border-gray-100">
+                <button 
+                  onClick={() => setIsDetailModalOpen(false)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm"
+                >
+                  Cerrar
+                </button>
+              </div>
+
+            </div>
           </div>
         </div>
       )}
