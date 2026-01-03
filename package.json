@@ -5,11 +5,10 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "build": "npm install --prefix client && npm run build --prefix client"
+    "build": "cd client && npm install && npm run build && cd .."
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
-    "better-sqlite3": "^12.5.0",
     "btoa": "^1.2.1",
     "cors": "^2.8.5",
     "debug": "4.4.3",
@@ -20,6 +19,9 @@
     "pg": "^8.16.3",
     "qrcode": "^1.5.4",
     "sharp": "^0.33.5"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.5.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

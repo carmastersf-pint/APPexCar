@@ -142,7 +142,14 @@ if (DATABASE_URL) {
 
 } else {
   // SQLite mode
-  const Database = require('better-sqlite3');
+  let Database;
+  try {
+    Database = require('better-sqlite3');
+  } catch (e) {
+    console.error("❌ Error: better-sqlite3 not found. If you are in production, ensure DATABASE_URL is set to use PostgreSQL.");
+    console.error("If you are in development, run 'npm install'.");
+    process.exit(1);
+  }
   const dbPath = path.join(__dirname, 'taller.db');
   const needInit = !fs.existsSync(dbPath);
   const db = new Database(dbPath);
