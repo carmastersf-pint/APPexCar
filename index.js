@@ -48,6 +48,8 @@ function authenticateToken(req, res, next) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+console.log("Iniciando servidor...");
+console.log("NODE_ENV:", process.env.NODE_ENV);
 
 app.use(cors());
 app.use(express.json());
