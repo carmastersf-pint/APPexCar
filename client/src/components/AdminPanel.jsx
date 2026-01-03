@@ -13,12 +13,18 @@ import {
   Car,
   Image as ImageIcon,
   Calendar,
-  DollarSign
+  DollarSign,
+  PieChart,
+  FileText,
+  TrendingUp,
+  TrendingDown,
+  Printer
 } from 'lucide-react';
 import axios from "axios";
+import { toast } from 'sonner';
 
 // Configurar API
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || "";
 const api = axios.create({
   baseURL: API_URL,
 });
@@ -43,6 +49,7 @@ export default function AdminPanel() {
   const [clientes, setClientes] = useState([]);
   const [vehiculos, setVehiculos] = useState([]);
   const [ordenes, setOrdenes] = useState([]);
+  const [costos, setCostos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -51,6 +58,7 @@ export default function AdminPanel() {
   const [isOrdenModalOpen, setIsOrdenModalOpen] = useState(false); // Orden
   const [selectedOrden, setSelectedOrden] = useState(null); // Orden Seleccionada
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false); // Detalle Orden
+  const [isQuote, setIsQuote] = useState(false); // Si es cotización
 
   // Estados de Formularios
   const [newClient, setNewClient] = useState({ nombre: '', telefono: '', correo: '' });
@@ -59,7 +67,8 @@ export default function AdminPanel() {
     vehiculo_id: '',
     descripcion: '',
     total: '',
-    imagenes: []
+    imagenes: [],
+    status: 'pendiente'
   });
 
   // Verificar Auth
@@ -74,13 +83,16 @@ export default function AdminPanel() {
   useEffect(() => {
     if (activeTab === 'clientes') {
       cargarClientes();
-    } else if (activeTab === 'ordenes') {
+    } else if (activeTab === 'ordenes' || activeTab === 'cotizaciones') {
       cargarClientes();
       cargarVehiculos();
       cargarOrdenes();
     } else if (activeTab === 'dashboard') {
       cargarClientes();
       cargarOrdenes();
+    } else if (activeTab === 'finanzas') {
+      cargarOrdenes();
+      cargarCostos();
     }
   }, [activeTab]);
 
@@ -122,6 +134,75 @@ export default function AdminPanel() {
     }
   };
 
+  const [ordenCostos, setOrdenCostos] = useState([]);
+  const [newCosto, setNewCosto] = useState({ concepto: '', costo: '', tipo: 'material' });
+
+  const cargarOrdenCostos = async (ordenId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await api.get(`/ordenes/${ordenId}/costos`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setOrdenCostos(res.data);
+    } catch (error) {
+      console.error("Error loading orden costos:", error);
+    }
+  };
+
+  const handleSaveCosto = async (e) => {
+    e.preventDefault();
+    if (!newCosto.concepto || !newCosto.costo) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      await api.post(`/ordenes/${selectedOrden.id}/costos`, newCosto, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setNewCosto({ concepto: '', costo: '', tipo: 'material' });
+      cargarOrdenCostos(selectedOrden.id);
+      cargarCostos(); // Actualizar costos globales
+      toast.success("Costo registrado");
+    } catch (error) {
+      console.error(error);
+      toast.error("Error al registrar costo");
+    }
+  };
+
+  const handleConvertToOrder = async (orden) => {
+    if (!confirm('¿Convertir esta cotización en Orden de Servicio?')) return;
+    toast.promise(
+      async () => {
+        const token = localStorage.getItem('token');
+        await api.put(`/ordenes/${orden.id}`, 
+          { status: 'pendiente' }, 
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        cargarOrdenes();
+      },
+      {
+        loading: 'Convirtiendo cotización...',
+        success: 'Cotización convertida a Orden de Servicio',
+        error: 'Error al convertir cotización',
+      }
+    );
+  };
+
+  useEffect(() => {
+    if (selectedOrden && isDetailModalOpen) {
+      cargarOrdenCostos(selectedOrden.id);
+    }
+  }, [selectedOrden, isDetailModalOpen]);
+
+  const cargarCostos = async () => {
+    try {
+      const res = await api.get("/costos");
+      setCostos(res.data);
+    } catch (error) {
+      console.error("Error cargando costos:", error);
+    }
+  };
+
   const handleSaveClient = async (e) => {
     e.preventDefault();
     if (!newClient.nombre) return;
@@ -131,9 +212,10 @@ export default function AdminPanel() {
       setNewClient({ nombre: '', telefono: '', correo: '' });
       setIsModalOpen(false);
       cargarClientes();
+      toast.success("Cliente registrado exitosamente");
     } catch (error) {
       console.error("Error saving client:", error);
-      alert("Error al guardar cliente");
+      toast.error("Error al guardar cliente");
     } finally {
       setSaving(false);
     }
@@ -142,7 +224,7 @@ export default function AdminPanel() {
   const handleSaveOrden = async (e) => {
     e.preventDefault();
     if (!newOrden.cliente_id || !newOrden.vehiculo_id) {
-      alert("Por favor seleccione cliente y vehículo");
+      toast.warning("Por favor seleccione cliente y vehículo");
       return;
     }
 
@@ -153,6 +235,7 @@ export default function AdminPanel() {
       formData.append('vehiculo_id', newOrden.vehiculo_id);
       formData.append('descripcion', newOrden.descripcion);
       formData.append('total', newOrden.total || 0);
+      formData.append('status', newOrden.status || 'pendiente');
       
       // Adjuntar imágenes
       if (newOrden.imagenes && newOrden.imagenes.length > 0) {
@@ -176,13 +259,15 @@ export default function AdminPanel() {
         vehiculo_id: '',
         descripcion: '',
         total: '',
-        imagenes: []
+        imagenes: [],
+        status: 'pendiente'
       });
       setIsOrdenModalOpen(false);
       cargarOrdenes();
+      toast.success(isQuote ? "Cotización creada exitosamente" : "Orden creada exitosamente");
     } catch (error) {
       console.error("Error saving orden:", error);
-      alert("Error al crear orden (Posible error de autenticación o servidor)");
+      toast.error("Error al crear registro");
     } finally {
       setSaving(false);
     }
@@ -209,7 +294,7 @@ export default function AdminPanel() {
       
     } catch (error) {
       console.error("Error updating orden:", error);
-      alert("Error al actualizar estado");
+      toast.error("Error al actualizar estado");
     } finally {
       setSaving(false);
     }
@@ -217,8 +302,10 @@ export default function AdminPanel() {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'cotizaciones', label: 'Cotizaciones', icon: FileText },
     { id: 'clientes', label: 'Clientes', icon: Users },
     { id: 'ordenes', label: 'Órdenes de Servicio', icon: ClipboardList },
+    { id: 'finanzas', label: 'Finanzas', icon: PieChart },
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
@@ -231,6 +318,90 @@ export default function AdminPanel() {
   const ventasMes = ordenes
     .filter(o => o.status === 'completado' || o.status === 'entregado')
     .reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
+  
+  // Calcular finanzas
+  const ingresosTotales = ventasMes; // Simplificado por ahora
+  const egresosTotales = costos.reduce((acc, curr) => acc + (parseFloat(curr.costo) || 0), 0);
+  const balance = ingresosTotales - egresosTotales;
+
+  const handlePrint = (orden) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return toast.error('Por favor habilite las ventanas emergentes');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Orden #${orden.id}</title>
+        <style>
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; }
+          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #dc2626; padding-bottom: 20px; margin-bottom: 40px; }
+          .logo { font-size: 28px; font-weight: 900; color: #dc2626; letter-spacing: -1px; }
+          .info { text-align: right; font-size: 14px; color: #666; }
+          .title { text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 40px; text-transform: uppercase; letter-spacing: 2px; color: #111; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+          .section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #999; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px; }
+          .section p { font-size: 15px; font-weight: 500; color: #111; margin: 0; }
+          .description { background: #f4f4f5; padding: 20px; border-radius: 8px; margin-bottom: 40px; }
+          .description h3 { margin-top: 0; color: #666; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; }
+          .description p { line-height: 1.6; white-space: pre-wrap; }
+          .financials { text-align: right; border-top: 1px solid #eee; padding-top: 20px; }
+          .row { display: flex; justify-content: flex-end; gap: 40px; margin-bottom: 5px; font-size: 14px; }
+          .row.total { font-size: 20px; font-weight: 900; color: #dc2626; margin-top: 10px; }
+          .footer { margin-top: 80px; font-size: 11px; text-align: center; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="logo">APEX CAR</div>
+          <div class="info">
+            <p><strong>Fecha:</strong> ${new Date().toLocaleDateString()}</p>
+            <p><strong>Folio:</strong> #${orden.id.toString().padStart(4, '0')}</p>
+          </div>
+        </div>
+
+        <div class="title">
+          ${orden.status === 'cotizacion' ? 'Cotización de Servicio' : 'Orden de Servicio'}
+        </div>
+
+        <div class="grid">
+          <div class="section">
+            <h3>Cliente</h3>
+            <p>${orden.cliente}</p>
+          </div>
+          <div class="section">
+            <h3>Vehículo</h3>
+            <p>${orden.vehiculo}</p>
+          </div>
+        </div>
+
+        <div class="description">
+          <h3>Descripción del Servicio</h3>
+          <p>${orden.descripcion}</p>
+        </div>
+
+        <div class="financials">
+          <div class="row"><span>Subtotal:</span> <span>$${(orden.total / 1.16).toFixed(2)}</span></div>
+          <div class="row"><span>IVA (16%):</span> <span>$${(orden.total - (orden.total / 1.16)).toFixed(2)}</span></div>
+          <div class="row total"><span>Total:</span> <span>$${parseFloat(orden.total).toFixed(2)}</span></div>
+          ${orden.anticipo > 0 ? `<div class="row" style="color: #16a34a; font-weight: bold;"><span>Anticipo:</span> <span>-$${parseFloat(orden.anticipo).toFixed(2)}</span></div>` : ''}
+          ${orden.anticipo > 0 ? `<div class="row" style="margin-top: 10px; font-weight: bold;"><span>Saldo Pendiente:</span> <span>$${(orden.total - orden.anticipo).toFixed(2)}</span></div>` : ''}
+        </div>
+
+        <div class="footer">
+          <p>Gracias por su preferencia. Este documento es un comprobante oficial de Apex Car Service Center.</p>
+          <p>www.apexcar.com | Tel: 55-1234-5678</p>
+        </div>
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 flex font-sans text-zinc-100 selection:bg-red-500/30">
@@ -432,7 +603,7 @@ export default function AdminPanel() {
                   />
                 </div>
                 <button 
-                  onClick={() => setIsOrdenModalOpen(true)}
+                  onClick={() => { setIsQuote(false); setIsOrdenModalOpen(true); }}
                   className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-all text-sm font-bold shadow-lg shadow-red-900/20 hover:shadow-red-900/40 active:scale-95"
                 >
                   <Plus className="w-4 h-4" /> NUEVA ORDEN
@@ -455,7 +626,7 @@ export default function AdminPanel() {
                   <tbody className="divide-y divide-zinc-800/50">
                     {loading ? (
                       <tr><td colSpan="7" className="px-6 py-8 text-center text-zinc-500 animate-pulse">Cargando órdenes...</td></tr>
-                    ) : ordenes.length === 0 ? (
+                    ) : ordenes.filter(o => o.status !== 'cotizacion').length === 0 ? (
                       <tr><td colSpan="7" className="px-6 py-12 text-center text-zinc-500">
                          <div className="flex flex-col items-center gap-2">
                           <ClipboardList className="w-8 h-8 opacity-20" />
@@ -463,7 +634,7 @@ export default function AdminPanel() {
                         </div>
                       </td></tr>
                     ) : (
-                      ordenes.map((orden) => (
+                      ordenes.filter(o => o.status !== 'cotizacion').map((orden) => (
                         <tr key={orden.id} className="hover:bg-zinc-800/30 transition-colors group">
                           <td className="px-6 py-4 font-mono text-zinc-500 group-hover:text-zinc-300">#{orden.id.toString().padStart(4, '0')}</td>
                           <td className="px-6 py-4 font-medium text-zinc-200 group-hover:text-white">{orden.cliente}</td>
@@ -487,6 +658,147 @@ export default function AdminPanel() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'cotizaciones' && (
+            <div className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl shadow-xl border border-zinc-800/50 overflow-hidden flex flex-col h-full max-h-[calc(100vh-140px)]">
+              <div className="p-6 border-b border-zinc-800/50 flex flex-col sm:flex-row justify-between items-center gap-4 bg-zinc-900/80">
+                 <div className="relative w-full sm:w-72 group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-red-500 transition-colors" />
+                  <input 
+                    type="text" 
+                    placeholder="Buscar cotización..." 
+                    className="w-full pl-10 pr-4 py-2.5 bg-black/20 border border-zinc-800 rounded-xl text-sm text-white focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50 transition-all placeholder-zinc-600"
+                  />
+                </div>
+                <button 
+                  onClick={() => { setIsQuote(true); setIsOrdenModalOpen(true); }}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-all text-sm font-bold shadow-lg shadow-red-900/20 hover:shadow-red-900/40 active:scale-95"
+                >
+                  <Plus className="w-4 h-4" /> NUEVA COTIZACIÓN
+                </button>
+              </div>
+
+              <div className="overflow-auto flex-1">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-zinc-900/90 text-zinc-500 font-bold text-xs uppercase tracking-wider sticky top-0 z-10 backdrop-blur-sm">
+                    <tr>
+                      <th className="px-6 py-4 border-b border-zinc-800">Folio</th>
+                      <th className="px-6 py-4 border-b border-zinc-800">Cliente</th>
+                      <th className="px-6 py-4 border-b border-zinc-800">Vehículo</th>
+                      <th className="px-6 py-4 border-b border-zinc-800">Descripción</th>
+                      <th className="px-6 py-4 border-b border-zinc-800">Total Est.</th>
+                      <th className="px-6 py-4 border-b border-zinc-800 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/50">
+                    {loading ? (
+                      <tr><td colSpan="6" className="px-6 py-8 text-center text-zinc-500 animate-pulse">Cargando cotizaciones...</td></tr>
+                    ) : ordenes.filter(o => o.status === 'cotizacion').length === 0 ? (
+                      <tr><td colSpan="6" className="px-6 py-12 text-center text-zinc-500">
+                         <div className="flex flex-col items-center gap-2">
+                          <FileText className="w-8 h-8 opacity-20" />
+                          <p>No hay cotizaciones registradas</p>
+                        </div>
+                      </td></tr>
+                    ) : (
+                      ordenes.filter(o => o.status === 'cotizacion').map((orden) => (
+                        <tr key={orden.id} className="hover:bg-zinc-800/30 transition-colors group">
+                          <td className="px-6 py-4 font-mono text-zinc-500 group-hover:text-zinc-300">#{orden.id.toString().padStart(4, '0')}</td>
+                          <td className="px-6 py-4 font-medium text-zinc-200 group-hover:text-white">{orden.cliente}</td>
+                          <td className="px-6 py-4 text-zinc-400 text-xs uppercase tracking-wide">{orden.vehiculo}</td>
+                          <td className="px-6 py-4 text-zinc-500 truncate max-w-xs">{orden.descripcion}</td>
+                          <td className="px-6 py-4 font-mono text-zinc-200">${orden.total}</td>
+                          <td className="px-6 py-4 text-right flex justify-end gap-2">
+                            <button onClick={() => handleViewOrden(orden)} className="text-zinc-400 hover:text-white font-bold text-xs uppercase tracking-wide">Ver</button>
+                            <button onClick={() => handleConvertToOrder(orden)} className="text-green-500 hover:text-green-400 font-bold text-xs uppercase tracking-wide border border-green-500/20 bg-green-500/5 px-2 py-1 rounded hover:bg-green-500/10 transition-colors">Convertir a Orden</button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'finanzas' && (
+            <div className="space-y-6">
+              {/* Finanzas Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-zinc-900/50 backdrop-blur-sm p-6 rounded-2xl shadow-xl border border-zinc-800/50 group hover:border-zinc-700 transition-all">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Ingresos Totales</h3>
+                    <span className="p-2 bg-green-500/10 text-green-500 rounded-lg group-hover:scale-110 transition-transform duration-300">
+                      <TrendingUp className="w-5 h-5" />
+                    </span>
+                  </div>
+                  <p className="text-4xl font-black text-white tracking-tight">${ingresosTotales.toFixed(2)}</p>
+                  <p className="text-xs text-zinc-500 mt-2 font-medium">Basado en órdenes completadas</p>
+                </div>
+
+                <div className="bg-zinc-900/50 backdrop-blur-sm p-6 rounded-2xl shadow-xl border border-zinc-800/50 group hover:border-zinc-700 transition-all">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Egresos Totales</h3>
+                    <span className="p-2 bg-red-500/10 text-red-500 rounded-lg group-hover:scale-110 transition-transform duration-300">
+                      <TrendingDown className="w-5 h-5" />
+                    </span>
+                  </div>
+                  <p className="text-4xl font-black text-white tracking-tight">${egresosTotales.toFixed(2)}</p>
+                  <p className="text-xs text-zinc-500 mt-2 font-medium">Costos registrados en órdenes</p>
+                </div>
+
+                <div className="bg-zinc-900/50 backdrop-blur-sm p-6 rounded-2xl shadow-xl border border-zinc-800/50 group hover:border-zinc-700 transition-all">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Balance Neto</h3>
+                    <span className="p-2 bg-blue-500/10 text-blue-500 rounded-lg group-hover:scale-110 transition-transform duration-300">
+                      <PieChart className="w-5 h-5" />
+                    </span>
+                  </div>
+                  <p className={`text-4xl font-black tracking-tight ${balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {balance >= 0 ? '+' : ''}${balance.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-2 font-medium">Utilidad neta calculada</p>
+                </div>
+              </div>
+
+              {/* Lista de Costos */}
+              <div className="bg-zinc-900/50 backdrop-blur-sm rounded-2xl shadow-xl border border-zinc-800/50 overflow-hidden flex flex-col h-full max-h-[600px]">
+                <div className="p-6 border-b border-zinc-800/50 bg-zinc-900/80">
+                  <h3 className="font-bold text-white tracking-wide">REGISTRO DE COSTOS / EGRESOS</h3>
+                </div>
+                <div className="overflow-auto flex-1">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-zinc-900/90 text-zinc-500 font-bold text-xs uppercase tracking-wider sticky top-0 z-10 backdrop-blur-sm">
+                      <tr>
+                        <th className="px-6 py-4 border-b border-zinc-800">Fecha</th>
+                        <th className="px-6 py-4 border-b border-zinc-800">Concepto</th>
+                        <th className="px-6 py-4 border-b border-zinc-800">Tipo</th>
+                        <th className="px-6 py-4 border-b border-zinc-800">Orden Asoc.</th>
+                        <th className="px-6 py-4 border-b border-zinc-800 text-right">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50">
+                      {costos.length === 0 ? (
+                        <tr><td colSpan="5" className="px-6 py-12 text-center text-zinc-500">No hay costos registrados</td></tr>
+                      ) : (
+                        costos.map((costo) => (
+                          <tr key={costo.id} className="hover:bg-zinc-800/30 transition-colors">
+                            <td className="px-6 py-4 text-zinc-400 font-mono text-xs">{new Date(costo.created_at).toLocaleDateString()}</td>
+                            <td className="px-6 py-4 text-zinc-200 font-medium">{costo.concepto}</td>
+                            <td className="px-6 py-4">
+                              <span className="px-2 py-1 rounded bg-zinc-800 text-zinc-400 text-xs border border-zinc-700 capitalize">{costo.tipo}</span>
+                            </td>
+                            <td className="px-6 py-4 text-zinc-500 text-xs">#{costo.orden_id}</td>
+                            <td className="px-6 py-4 text-right text-red-400 font-mono">-${parseFloat(costo.costo).toFixed(2)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -566,12 +878,12 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* Modal Nueva Orden */}
+      {/* Modal Nueva Orden / Cotización */}
       {isOrdenModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto ring-1 ring-white/10 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
             <div className="px-6 py-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/95 sticky top-0 z-10 backdrop-blur-md">
-              <h3 className="font-bold text-white tracking-wide">NUEVA ORDEN DE SERVICIO</h3>
+              <h3 className="font-bold text-white tracking-wide">{isQuote ? 'NUEVA COTIZACIÓN' : 'NUEVA ORDEN DE SERVICIO'}</h3>
               <button onClick={() => setIsOrdenModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
               </button>
@@ -696,9 +1008,18 @@ export default function AdminPanel() {
                 <h3 className="font-bold text-white tracking-wide">ORDEN #{selectedOrden.id.toString().padStart(4, '0')}</h3>
                 <p className="text-xs text-zinc-500 uppercase tracking-wider mt-0.5">{selectedOrden.cliente} - {selectedOrden.vehiculo}</p>
               </div>
-              <button onClick={() => setIsDetailModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => handlePrint(selectedOrden)}
+                  className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-all"
+                  title="Imprimir Orden/Cotización"
+                >
+                  <Printer className="w-5 h-5" />
+                </button>
+                <button onClick={() => setIsDetailModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             
             <div className="p-6 space-y-8">
@@ -746,6 +1067,66 @@ export default function AdminPanel() {
                          <span className="text-red-500">${(selectedOrden.total || 0) - (selectedOrden.anticipo || 0)}</span>
                       </div>
                    </div>
+                </div>
+              </div>
+
+              {/* Costos / Egresos */}
+              <div>
+                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Registro de Costos (Egresos)</h4>
+                <div className="bg-zinc-800/50 p-4 rounded-xl border border-zinc-700/50">
+                  {/* Lista */}
+                  {ordenCostos.length > 0 ? (
+                    <div className="space-y-2 mb-4">
+                      {ordenCostos.map(costo => (
+                        <div key={costo.id} className="flex justify-between items-center text-sm p-2 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                           <span className="text-zinc-300">{costo.concepto} <span className="text-xs text-zinc-500 ml-2">({costo.tipo})</span></span>
+                           <span className="font-mono text-red-400">-${parseFloat(costo.costo).toFixed(2)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between items-center pt-2 border-t border-zinc-700">
+                         <span className="font-bold text-zinc-400 text-xs uppercase">Total Costos</span>
+                         <span className="font-bold text-red-500 text-sm">-${ordenCostos.reduce((acc, c) => acc + parseFloat(c.costo), 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-zinc-500 italic mb-4">No hay costos registrados.</p>
+                  )}
+
+                  {/* Formulario */}
+                  <form onSubmit={handleSaveCosto} className="flex flex-col sm:flex-row gap-2 items-end">
+                     <div className="flex-1 w-full">
+                        <input 
+                          type="text" 
+                          placeholder="Concepto (ej. Refacción, Mano de obra)" 
+                          value={newCosto.concepto}
+                          onChange={e => setNewCosto({...newCosto, concepto: e.target.value})}
+                          className="w-full px-3 py-2 bg-black/40 border border-zinc-700 rounded-lg text-sm text-white focus:border-red-500 focus:outline-none"
+                        />
+                     </div>
+                     <div className="w-full sm:w-32">
+                        <input 
+                          type="number" 
+                          placeholder="Monto" 
+                          value={newCosto.costo}
+                          onChange={e => setNewCosto({...newCosto, costo: e.target.value})}
+                          className="w-full px-3 py-2 bg-black/40 border border-zinc-700 rounded-lg text-sm text-white focus:border-red-500 focus:outline-none"
+                        />
+                     </div>
+                     <div className="w-full sm:w-36">
+                       <select 
+                          value={newCosto.tipo}
+                          onChange={e => setNewCosto({...newCosto, tipo: e.target.value})}
+                          className="w-full px-3 py-2 bg-black/40 border border-zinc-700 rounded-lg text-sm text-white focus:border-red-500 focus:outline-none appearance-none"
+                       >
+                         <option value="material">Material</option>
+                         <option value="mano_obra">Mano Obra</option>
+                         <option value="externo">Externo</option>
+                       </select>
+                     </div>
+                     <button type="submit" className="w-full sm:w-auto px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors flex justify-center items-center">
+                       <TrendingDown className="w-5 h-5" />
+                     </button>
+                  </form>
                 </div>
               </div>
 

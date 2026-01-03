@@ -4,7 +4,7 @@ import axios from 'axios';
 import { Lock, User, ArrowRight, AlertCircle, Wrench, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);

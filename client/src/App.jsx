@@ -6,10 +6,12 @@ import Recomendacion from "./components/Recomendacion";
 
 import AdminPanel from "./components/AdminPanel";
 import Login from "./components/Login";
+import { Toaster } from 'sonner';
 
 function App() {
   return (
     <BrowserRouter>
+      <Toaster position="top-right" richColors theme="dark" />
       <Routes>
         <Route path="/" element={<CarMastersHero />} />
         <Route path="/login" element={<Login />} />
