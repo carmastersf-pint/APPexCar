@@ -523,19 +523,29 @@ app.get("/_health", (req, res) => res.json({ ok: true }));
 // =========================
 
 // SUBIR IMÁGENES A UNA ORDEN EXISTENTE
-app.post("/ordenes/:id/imagenes", authenticateToken, upload.single("imagen"), (req, res) => {
+app.post("/ordenes/:id/imagenes", authenticateToken, upload.single("imagen"), async (req, res) => {
   try {
     const id = req.params.id;
-    const orden = db.get("SELECT * FROM ordenes WHERE id = ?", [id]); // Fixed: use db.get wrapper or imported get if available. 
-    // Wait, the previous code used `get` which was not defined in this scope! It was using `dbGet`.
-    // The previous code had `const orden = get(...)`. `get` is not defined in index.js globally unless imported.
-    // Looking at imports: `const db = require("./database");` and helpers `dbGet`, `dbAll`.
-    // The dead code at the bottom used `get` and `run`. This code was likely broken or copy-pasted.
-    // I should fix it to use `dbGet` and `dbRun`.
+    if (!req.file) return res.status(400).json({ error: "No se subió ninguna imagen" });
+
+    const orden = await dbGet("SELECT * FROM ordenes WHERE id = ?", [id]);
     
-    // ... fixing implementation ...
     if (!orden) return res.status(404).json({ error: "Orden no encontrada" });
-    // ...
+
+    let imagenes = [];
+    try {
+      imagenes = orden.imagenes ? JSON.parse(orden.imagenes) : [];
+    } catch (e) {
+      imagenes = [];
+    }
+
+    const newUrl = "/uploads/" + req.file.filename;
+    imagenes.push(newUrl);
+
+    await dbRun("UPDATE ordenes SET imagenes = ? WHERE id = ?", [JSON.stringify(imagenes), id]);
+    await log("subir_imagen", `Orden ${id}: ${req.file.filename}`);
+
+    res.json({ ok: true, imagenes });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Error al subir imagen" });
