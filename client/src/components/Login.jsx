@@ -67,7 +67,7 @@ export default function Login() {
             transition={{ type: "spring", stiffness: 200, damping: 20 }}
             className="flex justify-center mb-6"
           >
-             <img src="/logo.png" alt="Apex Car" className="h-40 w-auto object-contain drop-shadow-[0_0_25px_rgba(220,38,38,0.3)]" />
+             <img src="/logo.png" alt="Salvador Garage" className="h-40 w-auto object-contain drop-shadow-[0_0_25px_rgba(220,38,38,0.3)]" />
           </motion.div>
           
           <motion.div

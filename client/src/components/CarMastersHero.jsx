@@ -20,7 +20,7 @@ export default function CarMastersHero() {
       <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-6 transition-all duration-300 bg-zinc-950/80 backdrop-blur-md border-b border-white/5">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Apex Car" className="h-16 w-auto object-contain hover:scale-105 transition-transform duration-300" />
+            <img src="/logo.png" alt="Salvador Garage" className="h-16 w-auto object-contain hover:scale-105 transition-transform duration-300" />
           </div>
 
           {/* Desktop Menu */}
@@ -86,7 +86,7 @@ export default function CarMastersHero() {
           </h1>
 
           <p className="text-sm md:text-base text-zinc-400 max-w-xl mx-auto mb-12 leading-relaxed font-medium tracking-wide">
-            Especialistas en protección y estética automotriz de alto nivel. 
+            Taller de laminado, pintura y estética vehicular de alto nivel. 
             PPF, Recubrimientos Cerámicos y Restauración para quienes exigen perfección.
           </p>
 

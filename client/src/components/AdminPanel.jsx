@@ -353,7 +353,7 @@ export default function AdminPanel() {
       </head>
       <body>
         <div class="header">
-          <div class="logo">APEX CAR</div>
+          <div class="logo">SALVADOR GARAGE</div>
           <div class="info">
             <p><strong>Fecha:</strong> ${new Date().toLocaleDateString()}</p>
             <p><strong>Folio:</strong> #${orden.id.toString().padStart(4, '0')}</p>
@@ -389,8 +389,8 @@ export default function AdminPanel() {
         </div>
 
         <div class="footer">
-          <p>Gracias por su preferencia. Este documento es un comprobante oficial de Apex Car Service Center.</p>
-          <p>www.apexcar.com | Tel: 55-1234-5678</p>
+          <p>Gracias por su preferencia. Este documento es un comprobante oficial de Salvador Garage.</p>
+          <p>Salvador Garage | Tel: 314-101-2929</p>
         </div>
         <script>
           window.onload = function() { window.print(); }
